@@ -1,0 +1,11 @@
+# ── Streamlit Cloud / GitHub Actions (Linux) ─────────────────────────
+# 이 파일은 Linux 환경(Streamlit Cloud, GitHub)에서 그대로 사용합니다.
+# Windows 로컬은 install.bat (conda 방식) 을 사용하세요.
+ 
+streamlit>=1.32.0
+pandas>=2.0.0
+plotly>=5.18.0
+requests>=2.32.2
+numpy>=1.24.0
+scikit-learn>=1.3.0
+tabpfn-time-series>=1.0.0.0

@@ -19,7 +19,9 @@ export interface SeriesInfoItem {
 
 export interface IciMmfPoint {
   date: string; // YYYY-MM-DD
-  value: number;
+  total: number;      // Total All
+  government: number; // Government Total
+  prime: number;      // Prime Total
 }
 
 export interface IciMmfResponse {

@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import useSWR from 'swr';
 import clsx from 'clsx';
 import PeriodSelector from './PeriodSelector';
-import type { FredObservation, BalanceSheetRow, IciMmfResponse } from '@/lib/types';
+import type { FredObservation, BalanceSheetRow, IciMmfResponse, IciMmfPoint } from '@/lib/types';
 import { SERIES_INFO, PERIOD_OPTIONS } from '@/lib/constants';
 import {
   formatNumber, formatChange, getFredLink, periodDaysAgo, today, quarterLabel,
@@ -130,7 +130,11 @@ function BalanceSheetTable({ rows }: { rows: BalanceSheetRow[] }) {
 
 // ── Main component ────────────────────────────────────────────────────────
 interface AllSeriesData {
-  [name: string]: { summary?: FredObservation[]; chart?: FredObservation[] };
+  [name: string]: {
+    summary?: FredObservation[];
+    chart?: FredObservation[];
+    iciData?: IciMmfPoint[];
+  };
 }
 
 export default function BalanceSheetTab() {
@@ -156,16 +160,11 @@ export default function BalanceSheetTab() {
             const r = await fetch('/api/mmf-ici');
             const json: IciMmfResponse = await r.json();
             if (json.data?.length) {
-              // Filter chart data by date range
-              const chartData = json.data
-                .filter(p => p.date >= startDate && p.date <= endDate)
-                .map(p => ({ date: p.date, value: p.value }));
-              // Summary: last 10 in descending order
-              const summary = [...json.data]
-                .sort((a, b) => b.date.localeCompare(a.date))
-                .slice(0, 10)
-                .map(p => ({ date: p.date, value: p.value }));
-              results[name] = { summary, chart: chartData };
+              const filtered = json.data.filter(p => p.date >= startDate && p.date <= endDate);
+              const sorted = [...json.data].sort((a, b) => b.date.localeCompare(a.date));
+              // summary uses total for table display
+              const summary = sorted.slice(0, 10).map(p => ({ date: p.date, value: p.total }));
+              results[name] = { summary, chart: filtered.map(p => ({ date: p.date, value: p.total })), iciData: filtered };
             } else {
               results[name] = {};
             }
@@ -204,14 +203,66 @@ export default function BalanceSheetTab() {
   // Build table rows
   const rows: BalanceSheetRow[] = Object.entries(SERIES_INFO)
     .sort(([, a], [, b]) => a.order - b.order)
-    .map(([name, info]) => {
+    .flatMap(([name, info]) => {
       const data = allData[name]?.summary ?? [];
+
+      // ICI MMF: expand into 3 sub-rows (Total All / Government Total / Prime Total)
+      if (info.apiSource === 'ici') {
+        const iciRaw = allData[name]?.iciData ?? [];
+        const sorted = [...iciRaw].sort((a, b) => b.date.localeCompare(a.date));
+        const curr = sorted[0];
+        const prev = sorted[1];
+        const makeRow = (
+          rowName: string,
+          desc: string,
+          getCurr: (p: IciMmfPoint) => number,
+          isHighlight: boolean,
+        ): BalanceSheetRow => {
+          if (curr && prev) {
+            const cv = getCurr(curr);
+            const pv = getCurr(prev);
+            return {
+              category: info.category,
+              name: rowName,
+              seriesId: info.id,
+              description: desc,
+              currentDate: curr.date,
+              currentValue: formatNumber(cv),
+              prevDate: prev.date,
+              prevValue: formatNumber(pv),
+              change: formatChange(cv - pv),
+              changeNum: cv - pv,
+              liquidityImpact: info.liquidityImpact,
+              highlight: isHighlight,
+              order: info.order,
+            };
+          }
+          return {
+            category: info.category,
+            name: rowName,
+            seriesId: info.id,
+            description: desc,
+            currentDate: 'N/A', currentValue: 'N/A',
+            prevDate: 'N/A', prevValue: 'N/A',
+            change: 'N/A', changeNum: 0,
+            liquidityImpact: info.liquidityImpact,
+            highlight: isHighlight,
+            order: info.order,
+          };
+        };
+        return [
+          makeRow('MMF Total All', '머니마켓펀드 전체 합계', p => p.total, true),
+          makeRow('  ㄴ Government Total', '정부형 MMF', p => p.government, false),
+          makeRow('  ㄴ Prime Total', '프라임형 MMF', p => p.prime, false),
+        ];
+      }
+
       if (data.length >= 2) {
         const curr = data[0];
         const prev = data[1];
         const change = curr.value - prev.value;
         const isQ = info.isQuarterly;
-        return {
+        return [{
           category: info.category,
           name: isQ ? `${name} 🔶` : name,
           seriesId: info.id,
@@ -225,9 +276,9 @@ export default function BalanceSheetTab() {
           liquidityImpact: info.liquidityImpact,
           highlight: info.highlight,
           order: info.order,
-        };
+        }];
       }
-      return {
+      return [{
         category: info.category,
         name: info.isQuarterly ? `${name} 🔶` : name,
         seriesId: info.id,
@@ -238,7 +289,7 @@ export default function BalanceSheetTab() {
         liquidityImpact: info.liquidityImpact,
         highlight: info.highlight,
         order: info.order,
-      };
+      }];
     });
 
   const isLoading = loadingCount > 0;
@@ -293,17 +344,23 @@ export default function BalanceSheetTab() {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {chartEntries.map(([name, info]) => {
+              const isIci = info.apiSource === 'ici';
+              const iciRaw = allData[name]?.iciData ?? [];
               const raw = allData[name]?.chart ?? [];
-              const data = raw
-                .slice()
-                .sort((a, b) => a.date.localeCompare(b.date))
-                .map(d => ({ time: d.date, value: d.value }));
+
+              const totalData = isIci
+                ? iciRaw.sort((a, b) => a.date.localeCompare(b.date)).map(d => ({ time: d.date, value: d.total }))
+                : raw.slice().sort((a, b) => a.date.localeCompare(b.date)).map(d => ({ time: d.date, value: d.value }));
+              const govData = isIci ? iciRaw.map(d => ({ time: d.date, value: d.government })) : [];
+              const primeData = isIci ? iciRaw.map(d => ({ time: d.date, value: d.prime })) : [];
+
+              const hasData = totalData.length > 0;
 
               return (
                 <div key={name} className="bg-gray-900 rounded-lg p-4 border border-gray-700">
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="text-sm font-medium text-white truncate">{name.trim()}</h4>
-                    {info.apiSource === 'ici' ? (
+                    {isIci ? (
                       <a
                         href="https://www.ici.org/research/stats/mmf"
                         target="_blank"
@@ -323,11 +380,22 @@ export default function BalanceSheetTab() {
                       </a>
                     )}
                   </div>
-                  {data.length > 0 ? (
+                  {isIci && hasData && (
+                    <div className="flex gap-3 mb-1 text-xs">
+                      <span style={{ color: '#64b5f6' }}>● Total All</span>
+                      <span style={{ color: '#4ade80' }}>● Government</span>
+                      <span style={{ color: '#fb923c' }}>● Prime</span>
+                    </div>
+                  )}
+                  {hasData ? (
                     <TvChart
-                      series={[{
+                      series={isIci ? [
+                        { type: 'line', data: totalData, color: '#64b5f6', lineWidth: 2, name: 'Total All' },
+                        { type: 'line', data: govData, color: '#4ade80', lineWidth: 2, name: 'Government' },
+                        { type: 'line', data: primeData, color: '#fb923c', lineWidth: 2, name: 'Prime' },
+                      ] : [{
                         type: 'area',
-                        data,
+                        data: totalData,
                         color: '#64b5f6',
                         topColor: 'rgba(100,181,246,0.25)',
                         bottomColor: 'rgba(100,181,246,0.02)',

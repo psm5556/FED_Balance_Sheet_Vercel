@@ -38,12 +38,12 @@ export const SERIES_INFO: Record<string, SeriesInfoItem> = {
     order: 7, showChart: false,
   },
   '지급준비금 (Reserve Balances)': {
-    id: 'WRESBAL', highlight: true, category: '부채 (Liabilities)',
+    id: 'WRBWFRBL', highlight: true, category: '부채 (Liabilities)',
     description: '은행들이 연준에 예치한 자금', liquidityImpact: '증가 시 은행 유동성 ↑',
     order: 8, showChart: true,
   },
   'TGA (재무부 일반계정)': {
-    id: 'WTREGEN', highlight: true, category: '부채 (Liabilities)',
+    id: 'WDTGAL', highlight: true, category: '부채 (Liabilities)',
     description: '미 재무부의 연준 예금', liquidityImpact: '증가 시 시장 유동성 ↓',
     order: 9, showChart: true,
   },
@@ -53,9 +53,9 @@ export const SERIES_INFO: Record<string, SeriesInfoItem> = {
     order: 10, showChart: true,
   },
   'MMF (Money Market Funds)': {
-    id: 'MMMFFAQ027S', highlight: true, category: '부채 (Liabilities)',
-    description: '머니마켓펀드 총 자산 (분기별)', liquidityImpact: '증가 시 현금 보유 선호 ↑',
-    order: 11, showChart: true, isQuarterly: true,
+    id: 'ICI_MMF', highlight: true, category: '부채 (Liabilities)',
+    description: '머니마켓펀드 총 자산 (주간, ICI)', liquidityImpact: '증가 시 현금 보유 선호 ↑',
+    order: 11, showChart: true, apiSource: 'ici',
   },
   'Retail MMF': {
     id: 'WRMFNS', highlight: false, category: '부채 (Liabilities)',

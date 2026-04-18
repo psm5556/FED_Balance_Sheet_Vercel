@@ -14,6 +14,19 @@ export interface SeriesInfoItem {
   order: number;
   showChart: boolean;
   isQuarterly?: boolean;
+  apiSource?: 'fred' | 'ici'; // default: 'fred'
+}
+
+export interface IciMmfPoint {
+  date: string; // YYYY-MM-DD
+  value: number;
+}
+
+export interface IciMmfResponse {
+  data: IciMmfPoint[];
+  unit: string;
+  source: string;
+  lastUpdated?: string;
 }
 
 export interface BalanceSheetRow {

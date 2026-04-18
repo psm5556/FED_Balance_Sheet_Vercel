@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import useSWR from 'swr';
 import clsx from 'clsx';
 import PeriodSelector from './PeriodSelector';
-import type { FredObservation, BalanceSheetRow } from '@/lib/types';
+import type { FredObservation, BalanceSheetRow, IciMmfResponse } from '@/lib/types';
 import { SERIES_INFO, PERIOD_OPTIONS } from '@/lib/constants';
 import {
   formatNumber, formatChange, getFredLink, periodDaysAgo, today, quarterLabel,
@@ -98,14 +98,25 @@ function BalanceSheetTable({ rows }: { rows: BalanceSheetRow[] }) {
                     {row.liquidityImpact}
                   </td>
                   <td className="px-3 py-2.5 text-center">
-                    <a
-                      href={getFredLink(row.seriesId)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-400 hover:text-blue-300 text-xs whitespace-nowrap"
-                    >
-                      🔗 {row.seriesId}
-                    </a>
+                    {row.seriesId === 'ICI_MMF' ? (
+                      <a
+                        href="https://www.ici.org/research/stats/mmf"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 text-xs whitespace-nowrap"
+                      >
+                        🔗 ICI.org
+                      </a>
+                    ) : (
+                      <a
+                        href={getFredLink(row.seriesId)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 text-xs whitespace-nowrap"
+                      >
+                        🔗 {row.seriesId}
+                      </a>
+                    )}
                   </td>
                 </tr>
               </>
@@ -138,12 +149,38 @@ export default function BalanceSheetTab() {
     await Promise.all(
       names.map(async name => {
         const info = SERIES_INFO[name];
-        // Summary: last 10 observations
+
+        // ── ICI MMF (non-FRED source) ──────────────────────────────────
+        if (info.apiSource === 'ici') {
+          try {
+            const r = await fetch('/api/mmf-ici');
+            const json: IciMmfResponse = await r.json();
+            if (json.data?.length) {
+              // Filter chart data by date range
+              const chartData = json.data
+                .filter(p => p.date >= startDate && p.date <= endDate)
+                .map(p => ({ date: p.date, value: p.value }));
+              // Summary: last 10 in descending order
+              const summary = [...json.data]
+                .sort((a, b) => b.date.localeCompare(a.date))
+                .slice(0, 10)
+                .map(p => ({ date: p.date, value: p.value }));
+              results[name] = { summary, chart: chartData };
+            } else {
+              results[name] = {};
+            }
+          } catch {
+            results[name] = {};
+          }
+          setLoadingCount(c => c - 1);
+          return;
+        }
+
+        // ── Standard FRED fetch ────────────────────────────────────────
         const summaryP = new URLSearchParams({ series_id: info.id, limit: '10' });
         const summaryRes = await fetch(`/api/fred?${summaryP}`);
         const summaryJson = await summaryRes.json();
 
-        // Chart: historical range (only for showChart series)
         let chartData: FredObservation[] | undefined;
         if (info.showChart) {
           const chartP = new URLSearchParams({
@@ -266,14 +303,25 @@ export default function BalanceSheetTab() {
                 <div key={name} className="bg-gray-900 rounded-lg p-4 border border-gray-700">
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="text-sm font-medium text-white truncate">{name.trim()}</h4>
-                    <a
-                      href={getFredLink(info.id)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-blue-400 hover:text-blue-300 shrink-0 ml-2"
-                    >
-                      {info.id} ↗
-                    </a>
+                    {info.apiSource === 'ici' ? (
+                      <a
+                        href="https://www.ici.org/research/stats/mmf"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-400 hover:text-blue-300 shrink-0 ml-2"
+                      >
+                        ICI.org ↗
+                      </a>
+                    ) : (
+                      <a
+                        href={getFredLink(info.id)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-400 hover:text-blue-300 shrink-0 ml-2"
+                      >
+                        {info.id} ↗
+                      </a>
+                    )}
                   </div>
                   {data.length > 0 ? (
                     <TvChart

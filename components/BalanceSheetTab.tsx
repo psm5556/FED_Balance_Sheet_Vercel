@@ -458,7 +458,7 @@ export default function BalanceSheetTab() {
             <li><strong className="text-gray-100">지급준비금</strong>: 은행들이 연준에 예치한 초과 준비금</li>
             <li><strong className="text-gray-100">TGA</strong>: 미 재무부가 연준에 보관하는 현금 (증가 시 유동성 ↓)</li>
             <li><strong className="text-gray-100">RRP (역레포)</strong>: MMF 등이 초단기로 연준에 자금 예치 (증가 시 유동성 ↓)</li>
-            <li><strong className="text-gray-100">MMF</strong>: 머니마켓펀드 총 자산 규모 <em>(분기별 업데이트)</em></li>
+            <li><strong className="text-gray-100">MMF</strong>: 머니마켓펀드 총 자산 규모 <em>(주간 업데이트, ICI)</em></li>
           </ul>
         </div>
       </div>

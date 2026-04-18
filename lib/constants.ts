@@ -68,14 +68,13 @@ export const SERIES_INFO: Record<string, SeriesInfoItem> = {
 export const SPREADS: Record<string, SpreadInfo> = {
   'SOFR-IORB': {
     name: 'SOFR - IORB', series: ['SOFR', 'IORB'], multiplier: 1000,
-    thresholdMin: 0, thresholdMax: 10,
-    description: '은행간 신뢰도 및 유동성 선호 지표', normalRange: '0 ~ +10bp',
-    interpretation: '양수: 은행간 거래 활발 (정상) / 0에 근접 또는 음수: 은행들이 연준 예치 선호 (신뢰 위기)',
+    thresholdMin: -10, thresholdMax: -5,
+    description: '시중 은행의 지급준비금 여유도 및 단기 자금 시장의 병목 현상 측정', normalRange: '-10bp ~ -5bp',
+    interpretation: '스프레드 확대(SOFR→IORB 근접/상회): 유동성 경색 신호 — 국채 발행 과다 또는 지급준비금 부족 시 발생 / 골든존(-10~-5bp): SOFR이 IORB보다 약간 낮게 안정 유지 (정상) / 스프레드 축소(SOFR↘): 유동성 과잉 신호 — RRP 잔액 증가 시 주로 나타남',
     signals: {
-      crisis:  { min: -Infinity, max: 0,  message: '🚨 은행간 신뢰 붕괴 - 연준 예치 선호' },
-      warning: { min: 0,         max: 2,  message: '⚠️ 은행간 거래 위축 - 주의 필요' },
-      normal:  { min: 2,         max: 10, message: '✅ 정상 - 은행간 거래 활발' },
-      tight:   { min: 10,        max: Infinity, message: '📈 레포시장 타이트 - 담보 수요 증가' },
+      tight:  { min: -5,        max: Infinity, message: '📈 레포시장 타이트 - 단기 자금 및 담보 수요 지표' },
+      normal: { min: -10,       max: -5,       message: '✅ 골든존 - SOFR이 IORB보다 약간 낮게 안정 유지' },
+      loose:  { min: -Infinity, max: -10,      message: '💧 유동성 과잉 - RRP 잔액 증가 시 주로 나타남' },
     },
   },
   'EFFR-IORB': {

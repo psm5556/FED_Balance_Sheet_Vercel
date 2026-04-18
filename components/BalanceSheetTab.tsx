@@ -10,6 +10,7 @@ import {
 } from '@/lib/utils';
 
 const TvChart = dynamic(() => import('./TvChart'), { ssr: false });
+const MmfChart = dynamic(() => import('./MmfChart'), { ssr: false });
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
@@ -333,8 +334,8 @@ export default function BalanceSheetTab() {
         </div>
       )}
 
-      {/* Trend charts grid */}
-      {chartEntries.length > 0 && (
+      {/* Trend charts grid — non-ICI series */}
+      {chartEntries.filter(([, info]) => info.apiSource !== 'ici').length > 0 && (
         <div>
           <h3 className="text-base font-semibold text-white mb-3">
             주요 항목 추이
@@ -343,66 +344,20 @@ export default function BalanceSheetTab() {
             </span>
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {chartEntries.map(([name, info]) => {
-              const isIci = info.apiSource === 'ici';
-              const iciRaw = allData[name]?.iciData ?? [];
+            {chartEntries.filter(([, info]) => info.apiSource !== 'ici').map(([name, info]) => {
               const raw = allData[name]?.chart ?? [];
-
-              const totalData = isIci
-                ? iciRaw.sort((a, b) => a.date.localeCompare(b.date)).map(d => ({ time: d.date, value: d.total }))
-                : raw.slice().sort((a, b) => a.date.localeCompare(b.date)).map(d => ({ time: d.date, value: d.value }));
-              const govData = isIci ? iciRaw.map(d => ({ time: d.date, value: d.government })) : [];
-              const primeData = isIci ? iciRaw.map(d => ({ time: d.date, value: d.prime })) : [];
-
-              const hasData = totalData.length > 0;
-
+              const data = raw.slice().sort((a, b) => a.date.localeCompare(b.date)).map(d => ({ time: d.date, value: d.value }));
               return (
                 <div key={name} className="bg-gray-900 rounded-lg p-4 border border-gray-700">
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="text-sm font-medium text-white truncate">{name.trim()}</h4>
-                    {isIci ? (
-                      <a
-                        href="https://www.ici.org/research/stats/mmf"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-400 hover:text-blue-300 shrink-0 ml-2"
-                      >
-                        ICI.org ↗
-                      </a>
-                    ) : (
-                      <a
-                        href={getFredLink(info.id)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-400 hover:text-blue-300 shrink-0 ml-2"
-                      >
-                        {info.id} ↗
-                      </a>
-                    )}
+                    <a href={getFredLink(info.id)} target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-blue-400 hover:text-blue-300 shrink-0 ml-2">
+                      {info.id} ↗
+                    </a>
                   </div>
-                  {isIci && hasData && (
-                    <div className="flex gap-3 mb-1 text-xs">
-                      <span style={{ color: '#64b5f6' }}>● Total All</span>
-                      <span style={{ color: '#4ade80' }}>● Government</span>
-                      <span style={{ color: '#fb923c' }}>● Prime</span>
-                    </div>
-                  )}
-                  {hasData ? (
-                    <TvChart
-                      series={isIci ? [
-                        { type: 'line', data: totalData, color: '#64b5f6', lineWidth: 2, name: 'Total All' },
-                        { type: 'line', data: govData, color: '#4ade80', lineWidth: 2, name: 'Government' },
-                        { type: 'line', data: primeData, color: '#fb923c', lineWidth: 2, name: 'Prime' },
-                      ] : [{
-                        type: 'area',
-                        data: totalData,
-                        color: '#64b5f6',
-                        topColor: 'rgba(100,181,246,0.25)',
-                        bottomColor: 'rgba(100,181,246,0.02)',
-                        lineWidth: 2,
-                      }]}
-                      height={220}
-                    />
+                  {data.length > 0 ? (
+                    <TvChart series={[{ type: 'area', data, color: '#64b5f6', topColor: 'rgba(100,181,246,0.25)', bottomColor: 'rgba(100,181,246,0.02)', lineWidth: 2 }]} height={220} />
                   ) : (
                     <div className="h-[220px] flex items-center justify-center text-gray-500 text-sm">
                       {isLoading ? '로딩 중...' : '데이터 없음'}
@@ -414,6 +369,77 @@ export default function BalanceSheetTab() {
           </div>
         </div>
       )}
+
+      {/* MMF charts — two options */}
+      {chartEntries.filter(([, info]) => info.apiSource === 'ici').map(([name]) => {
+        const iciRaw = allData[name]?.iciData ?? [];
+        const sorted = [...iciRaw].sort((a, b) => a.date.localeCompare(b.date));
+        const totalData = sorted.map(d => ({ time: d.date, value: d.total }));
+        const govData   = sorted.map(d => ({ time: d.date, value: d.government }));
+        const primeData = sorted.map(d => ({ time: d.date, value: d.prime }));
+        const hasData = sorted.length > 0;
+
+        return (
+          <div key={name} className="space-y-4">
+            <h3 className="text-base font-semibold text-white">
+              MMF (Money Market Funds)
+              <span className="text-xs text-gray-400 ml-2 font-normal">{startDate} ~ {endDate}</span>
+              <a href="https://www.ici.org/research/stats/mmf" target="_blank" rel="noopener noreferrer"
+                className="text-xs text-blue-400 hover:text-blue-300 ml-3">ICI.org ↗</a>
+            </h3>
+
+            {/* Option A: Stacked bar + line */}
+            <div className="bg-gray-900 rounded-lg p-4 border border-yellow-600/40">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-white">옵션 A — 복합 차트 (누적 막대 + 라인)</span>
+                <div className="flex gap-3 text-xs">
+                  <span style={{ color: '#64b5f6' }}>— Total All</span>
+                  <span style={{ color: '#4ade80' }}>█ Government</span>
+                  <span style={{ color: '#fb923c' }}>█ Prime</span>
+                </div>
+              </div>
+              {hasData ? (
+                <MmfChart data={sorted} height={260} />
+              ) : (
+                <div className="h-[260px] flex items-center justify-center text-gray-500 text-sm">
+                  {isLoading ? '로딩 중...' : '데이터 없음'}
+                </div>
+              )}
+            </div>
+
+            {/* Option B: 3 separate line charts */}
+            <div className="bg-gray-900 rounded-lg p-4 border border-blue-600/40">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium text-white">옵션 B — 개별 라인 차트 (3개 분리)</span>
+              </div>
+              {hasData ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {([
+                    { label: 'Total All',   data: totalData, color: '#64b5f6' },
+                    { label: 'Government',  data: govData,   color: '#4ade80' },
+                    { label: 'Prime',       data: primeData, color: '#fb923c' },
+                  ] as const).map(({ label, data: d, color }) => (
+                    <div key={label}>
+                      <div className="text-xs font-medium mb-1" style={{ color }}>{label}</div>
+                      <TvChart
+                        series={[{
+                          type: 'area', data: d, color,
+                          topColor: `${color}33`, bottomColor: `${color}05`, lineWidth: 2,
+                        }]}
+                        height={180}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="h-[180px] flex items-center justify-center text-gray-500 text-sm">
+                  {isLoading ? '로딩 중...' : '데이터 없음'}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
 
       {/* Info cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

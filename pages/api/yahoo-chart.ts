@@ -1,6 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-const ALLOWED = new Set(['QQQ', 'SOXX']);
+const ALLOWED = new Set([
+  // Broad market
+  'QQQ', 'SOXX', 'SCHD',
+  // Sector ETFs
+  'XLK', 'VGT', 'XLV', 'XLF', 'XLY', 'XLP', 'XLI', 'XLC', 'XLE', 'XLU',
+  // Thematic ETFs
+  'GRID', 'QTUM', 'WQTM', 'ARKK', 'ARKF', 'ARKG',
+  'BOTZ', 'LIT', 'ICLN', 'CIBR', 'UFO', 'ITA', 'BLOK',
+]);
 
 interface YahooResponse {
   data: { date: string; close: number }[];

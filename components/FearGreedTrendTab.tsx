@@ -11,27 +11,75 @@ import type { SeriesConfig } from './TvChart';
 const TvChart = dynamic(() => import('./TvChart'), { ssr: false });
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
-type IndexKey = 'SP500' | 'QQQ' | 'SOXX';
+// ── Index option catalogue ────────────────────────────────────────────────────
 
-const INDEX_OPTIONS: { key: IndexKey; label: string; color: string }[] = [
-  { key: 'SP500', label: 'S&P 500',   color: '#f59e0b' },
-  { key: 'QQQ',  label: 'NASDAQ 100', color: '#a78bfa' },
-  { key: 'SOXX', label: 'SOXX',       color: '#34d399' },
+interface IndexOption {
+  key: string;
+  label: string;     // button text
+  title: string;     // tooltip / legend full name
+  color: string;
+}
+
+const INDEX_GROUPS: { group: string; items: IndexOption[] }[] = [
+  {
+    group: '주요',
+    items: [
+      { key: 'SP500', label: 'S&P 500',   title: 'S&P 500 (FRED)',          color: '#f59e0b' },
+      { key: 'QQQ',   label: 'NASDAQ 100', title: 'NASDAQ 100 (QQQ)',        color: '#a78bfa' },
+      { key: 'SOXX',  label: 'SOXX',       title: '반도체 (iShares SOXX)',    color: '#34d399' },
+      { key: 'SCHD',  label: 'SCHD',       title: '배당주 (Schwab SCHD)',     color: '#fb923c' },
+    ],
+  },
+  {
+    group: '섹터',
+    items: [
+      { key: 'XLK', label: 'XLK', title: '기술 (Technology)',               color: '#38bdf8' },
+      { key: 'VGT', label: 'VGT', title: '기술 (Vanguard VGT)',             color: '#7dd3fc' },
+      { key: 'XLV', label: 'XLV', title: '헬스케어',                        color: '#4ade80' },
+      { key: 'XLF', label: 'XLF', title: '금융',                            color: '#fde047' },
+      { key: 'XLY', label: 'XLY', title: '소비재',                          color: '#f472b6' },
+      { key: 'XLP', label: 'XLP', title: '필수소비재',                      color: '#cbd5e1' },
+      { key: 'XLI', label: 'XLI', title: '산업',                            color: '#c084fc' },
+      { key: 'XLC', label: 'XLC', title: '통신서비스',                      color: '#818cf8' },
+      { key: 'XLE', label: 'XLE', title: '에너지',                          color: '#d97706' },
+      { key: 'XLU', label: 'XLU', title: '유틸리티',                        color: '#2dd4bf' },
+    ],
+  },
+  {
+    group: '테마',
+    items: [
+      { key: 'ARKK', label: 'ARKK', title: 'ARK 혁신 ETF',                  color: '#f43f5e' },
+      { key: 'ARKF', label: 'ARKF', title: 'ARK 핀테크 ETF',                color: '#ec4899' },
+      { key: 'ARKG', label: 'ARKG', title: 'ARK 유전체 ETF',                color: '#10b981' },
+      { key: 'BOTZ', label: 'BOTZ', title: 'AI/로보틱스 (Global X)',         color: '#8b5cf6' },
+      { key: 'QTUM', label: 'QTUM', title: '양자컴퓨팅 (Defiance)',          color: '#06b6d4' },
+      { key: 'WQTM', label: 'WQTM', title: '양자컴퓨팅 (WisdomTree)',        color: '#22d3ee' },
+      { key: 'GRID', label: 'GRID', title: '스마트그리드 (First Trust)',      color: '#84cc16' },
+      { key: 'LIT',  label: 'LIT',  title: '리튬/배터리 (Global X)',         color: '#a3e635' },
+      { key: 'ICLN', label: 'ICLN', title: '클린에너지 (iShares)',           color: '#86efac' },
+      { key: 'CIBR', label: 'CIBR', title: '사이버보안 (First Trust)',        color: '#fb7185' },
+      { key: 'UFO',  label: 'UFO',  title: '우주항공 (Procure)',             color: '#c7d2fe' },
+      { key: 'ITA',  label: 'ITA',  title: '방산/항공우주 (iShares)',         color: '#9ca3af' },
+      { key: 'BLOK', label: 'BLOK', title: '블록체인 (Amplify)',             color: '#fbbf24' },
+    ],
+  },
 ];
 
+const ALL_INDEX_OPTIONS = INDEX_GROUPS.flatMap(g => g.items);
+
+// ── F&G line definitions ──────────────────────────────────────────────────────
+
 const FG_LINES = [
-  { key: 'd1',   label: '1일',     color: '#60a5fa' },
-  { key: 'ma20', label: '20일 MA', color: '#e2e8f0' },
-  { key: 'ma60', label: '60일 MA', color: '#eab308' },
-  { key: 'ma200',label: '200일 MA',color: '#f97316' },
+  { key: 'd1',    label: '1일',     color: '#60a5fa' },
+  { key: 'ma20',  label: '20일 MA', color: '#e2e8f0' },
+  { key: 'ma60',  label: '60일 MA', color: '#eab308' },
+  { key: 'ma200', label: '200일 MA',color: '#f97316' },
 ] as const;
 
 type FgLineKey = typeof FG_LINES[number]['key'];
 
-/**
- * OLS linear detrend: fit y = a·i + b, subtract trend, then normalize residuals to 0–100.
- * Applied to the visible (filtered) window so the normalization is contextual.
- */
+// ── Detrend: OLS linear regression → normalize residuals to 0–100 ─────────────
+
 function linearDetrend(data: { time: string; value: number }[]): { time: string; value: number }[] {
   const n = data.length;
   if (n < 2) return data.map(d => ({ ...d, value: 50 }));
@@ -56,27 +104,26 @@ function linearDetrend(data: { time: string; value: number }[]): { time: string;
   }));
 }
 
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function FearGreedTrendTab() {
-  const [periodDays, setPeriodDays] = useState<number | null>(null);
-  const [selectedIndex, setSelectedIndex] = useState<IndexKey | null>(null);
-  const [detrended, setDetrended] = useState(false);
-  const [fgVis, setFgVis] = useState<Record<FgLineKey, boolean>>({
+  const [periodDays, setPeriodDays]       = useState<number | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<string | null>(null);
+  const [detrended, setDetrended]         = useState(false);
+  const [fgVis, setFgVis]                 = useState<Record<FgLineKey, boolean>>({
     d1: true, ma20: true, ma60: true, ma200: true,
   });
 
+  // F&G + SP500 (FRED)
   const { data: histData, isLoading } = useSWR<FgHistoryResponse>(
     '/api/fear-greed-history', fetcher,
     { revalidateOnFocus: false, dedupingInterval: 1800000 }
   );
 
-  const { data: qqqData } = useSWR<{ data: { date: string; close: number }[] }>(
-    selectedIndex === 'QQQ' ? '/api/yahoo-chart?ticker=QQQ' : null,
-    fetcher,
-    { revalidateOnFocus: false, dedupingInterval: 1800000 }
-  );
-
-  const { data: soxxData } = useSWR<{ data: { date: string; close: number }[] }>(
-    selectedIndex === 'SOXX' ? '/api/yahoo-chart?ticker=SOXX' : null,
+  // Yahoo Finance proxy — single hook, key changes when selectedIndex changes
+  const yahooTicker = selectedIndex && selectedIndex !== 'SP500' ? selectedIndex : null;
+  const { data: yahooData } = useSWR<{ data: { date: string; close: number }[] }>(
+    yahooTicker ? `/api/yahoo-chart?ticker=${yahooTicker}` : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 1800000 }
   );
@@ -99,18 +146,19 @@ export default function FearGreedTrendTab() {
     let raw: { date: string; close: number }[] = [];
     if (selectedIndex === 'SP500' && histData?.sp500) {
       raw = histData.sp500.map(p => ({ date: p.date, close: p.price }));
-    } else if (selectedIndex === 'QQQ' && qqqData?.data) {
-      raw = qqqData.data;
-    } else if (selectedIndex === 'SOXX' && soxxData?.data) {
-      raw = soxxData.data;
+    } else if (yahooData?.data) {
+      raw = yahooData.data;
     }
     const filtered = cutoff ? raw.filter(p => new Date(p.date) >= cutoff) : raw;
     const series = filtered.map(p => ({ time: p.date, value: p.close }));
     return detrended ? linearDetrend(series) : series;
-  }, [selectedIndex, histData, qqqData, soxxData, cutoff, detrended]);
+  }, [selectedIndex, histData, yahooData, cutoff, detrended]);
 
-  const indexMeta = selectedIndex ? INDEX_OPTIONS.find(o => o.key === selectedIndex) : null;
+  const selectedMeta = selectedIndex
+    ? ALL_INDEX_OPTIONS.find(o => o.key === selectedIndex) ?? null
+    : null;
 
+  // Build chart series
   const chartSeries = useMemo<SeriesConfig[]>(() => {
     if (!filteredFg.length) return [];
 
@@ -138,42 +186,28 @@ export default function FearGreedTrendTab() {
 
     if (fgVis.ma20) {
       series.push({
-        type: 'line',
-        data: movingAverage(raw, 20),
-        color: '#e2e8f0',
-        lineWidth: 2,
-        priceScaleId: 'left',
-        lastValueVisible: true,
+        type: 'line', data: movingAverage(raw, 20),
+        color: '#e2e8f0', lineWidth: 2, priceScaleId: 'left', lastValueVisible: true,
       });
     }
-
     if (fgVis.ma60) {
       series.push({
-        type: 'line',
-        data: movingAverage(raw, 60),
-        color: '#eab308',
-        lineWidth: 2,
-        priceScaleId: 'left',
-        lastValueVisible: true,
+        type: 'line', data: movingAverage(raw, 60),
+        color: '#eab308', lineWidth: 2, priceScaleId: 'left', lastValueVisible: true,
       });
     }
-
     if (fgVis.ma200) {
       series.push({
-        type: 'line',
-        data: movingAverage(raw, 200),
-        color: '#f97316',
-        lineWidth: 2,
-        priceScaleId: 'left',
-        lastValueVisible: true,
+        type: 'line', data: movingAverage(raw, 200),
+        color: '#f97316', lineWidth: 2, priceScaleId: 'left', lastValueVisible: true,
       });
     }
 
-    if (indexMeta && filteredIndex.length > 0) {
+    if (selectedMeta && filteredIndex.length > 0) {
       series.push({
         type: 'line',
         data: filteredIndex,
-        color: indexMeta.color,
+        color: selectedMeta.color,
         lineWidth: 1.5,
         priceScaleId: detrended ? 'left' : 'right',
         lastValueVisible: true,
@@ -181,72 +215,80 @@ export default function FearGreedTrendTab() {
     }
 
     return series;
-  }, [filteredFg, filteredIndex, indexMeta, detrended, fgVis]);
+  }, [filteredFg, filteredIndex, selectedMeta, detrended, fgVis]);
 
   const showRightAxis = selectedIndex !== null && !detrended;
-
-  const toggleFg = (key: FgLineKey) =>
-    setFgVis(prev => ({ ...prev, [key]: !prev[key] }));
+  const toggleFg = (key: FgLineKey) => setFgVis(prev => ({ ...prev, [key]: !prev[key] }));
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
-        데이터 로딩 중...
-      </div>
-    );
+    return <div className="flex items-center justify-center h-64 text-gray-400 text-sm">데이터 로딩 중...</div>;
   }
 
   return (
-    <div className="space-y-4">
-      {/* Row 1: Period + Index selector + Detrend */}
-      <div className="flex flex-wrap items-center gap-3">
-        <PeriodSelector options={FG_PERIOD_OPTIONS} selected={periodDays} onChange={setPeriodDays} />
+    <div className="space-y-3">
 
-        <div className="h-4 border-l border-gray-700" />
+      {/* ── Period selector ───────────────────────────────────────────── */}
+      <PeriodSelector options={FG_PERIOD_OPTIONS} selected={periodDays} onChange={setPeriodDays} />
 
-        <div className="flex items-center gap-1">
-          <span className="text-xs text-gray-500 mr-1">지수 오버레이:</span>
-          <button
-            onClick={() => { setSelectedIndex(null); setDetrended(false); }}
-            className={clsx(
-              'px-3 py-1 text-sm rounded font-medium transition-colors',
-              selectedIndex === null ? 'bg-gray-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-            )}
-          >
-            없음
-          </button>
-          {INDEX_OPTIONS.map(opt => (
-            <button
-              key={opt.key}
-              onClick={() => setSelectedIndex(opt.key)}
-              className={clsx(
-                'px-3 py-1 text-sm rounded font-medium transition-colors border',
-                selectedIndex === opt.key ? 'text-white border-transparent' : 'bg-gray-800 text-gray-300 hover:bg-gray-700 border-transparent'
-              )}
-              style={selectedIndex === opt.key ? { backgroundColor: opt.color + 'aa' } : undefined}
-            >
-              {opt.label}
-            </button>
-          ))}
+      {/* ── Index overlay selector (grouped) ─────────────────────────── */}
+      <div className="bg-gray-900/60 rounded-lg border border-gray-800 p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-gray-400">지수 오버레이</span>
+          {selectedIndex && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setDetrended(v => !v)}
+                className={clsx(
+                  'px-2.5 py-1 text-xs rounded font-medium border transition-colors',
+                  detrended
+                    ? 'bg-violet-700 border-violet-500 text-white'
+                    : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+                )}
+                title="OLS 선형회귀로 장기 추세 제거 후 0-100 정규화 → F&G와 같은 축에 비교"
+              >
+                추세 제거 {detrended ? 'ON' : 'OFF'}
+              </button>
+              <button
+                onClick={() => { setSelectedIndex(null); setDetrended(false); }}
+                className="px-2.5 py-1 text-xs rounded text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700"
+              >
+                ✕ 해제
+              </button>
+            </div>
+          )}
         </div>
 
-        {selectedIndex && (
-          <button
-            onClick={() => setDetrended(v => !v)}
-            className={clsx(
-              'px-3 py-1 text-sm rounded font-medium transition-colors border',
-              detrended
-                ? 'bg-violet-700 border-violet-500 text-white'
-                : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
-            )}
-            title="선형회귀로 장기 추세를 제거한 후 0-100으로 정규화하여 F&G와 같은 축에 비교"
-          >
-            추세 제거 {detrended ? 'ON' : 'OFF'}
-          </button>
-        )}
+        {INDEX_GROUPS.map(({ group, items }) => (
+          <div key={group} className="flex items-start gap-2">
+            <span className="text-xs text-gray-600 w-10 shrink-0 pt-1">{group}</span>
+            <div className="flex flex-wrap gap-1">
+              {items.map(opt => {
+                const isSelected = selectedIndex === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    onClick={() => setSelectedIndex(isSelected ? null : opt.key)}
+                    title={opt.title}
+                    className={clsx(
+                      'px-2.5 py-0.5 text-xs rounded font-medium border transition-all whitespace-nowrap',
+                      isSelected
+                        ? 'text-white border-transparent'
+                        : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-gray-200 hover:border-gray-500'
+                    )}
+                    style={isSelected
+                      ? { backgroundColor: opt.color + '33', borderColor: opt.color + '99', color: opt.color }
+                      : undefined}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* Row 2: F&G line toggles (clickable legend) */}
+      {/* ── F&G line toggles (clickable legend) ──────────────────────── */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-gray-500">F&G 선:</span>
         {FG_LINES.map(({ key, label, color }) => (
@@ -255,35 +297,30 @@ export default function FearGreedTrendTab() {
             onClick={() => toggleFg(key)}
             className={clsx(
               'flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-medium transition-all',
-              fgVis[key]
-                ? 'text-white'
-                : 'border-gray-700 text-gray-600 bg-gray-900/30 opacity-50'
+              fgVis[key] ? 'text-white' : 'border-gray-700 text-gray-600 opacity-40'
             )}
             style={fgVis[key] ? { borderColor: color + '70', backgroundColor: color + '18' } : undefined}
           >
-            <div
-              className="w-4 h-0.5 rounded shrink-0"
-              style={{ backgroundColor: fgVis[key] ? color : '#4b5563' }}
-            />
+            <div className="w-4 h-0.5 rounded shrink-0" style={{ backgroundColor: fgVis[key] ? color : '#4b5563' }} />
             {label}
           </button>
         ))}
-        {indexMeta && (
+        {selectedMeta && (
           <>
             <span className="text-gray-700 text-xs">|</span>
             <div
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs text-white"
-              style={{ borderColor: indexMeta.color + '70', backgroundColor: indexMeta.color + '18' }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs"
+              style={{ borderColor: selectedMeta.color + '70', backgroundColor: selectedMeta.color + '18', color: selectedMeta.color }}
             >
-              <div className="w-4 h-0.5 rounded" style={{ backgroundColor: indexMeta.color }} />
-              {indexMeta.label}
-              {detrended && <span className="text-violet-300 ml-0.5">(추세 제거)</span>}
+              <div className="w-4 h-0.5 rounded" style={{ backgroundColor: selectedMeta.color }} />
+              {selectedMeta.title}
+              {detrended && <span className="text-violet-300 ml-0.5 text-[10px]">(추세 제거)</span>}
             </div>
           </>
         )}
       </div>
 
-      {/* Main chart */}
+      {/* ── Main chart ────────────────────────────────────────────────── */}
       <div className="bg-gray-900 rounded-xl border border-gray-700 overflow-hidden">
         {chartSeries.length > 0 ? (
           <TvChart
@@ -293,15 +330,13 @@ export default function FearGreedTrendTab() {
             rightScaleVisible={showRightAxis}
           />
         ) : (
-          <div className="flex items-center justify-center h-[750px] text-gray-500 text-sm">
-            데이터 없음
-          </div>
+          <div className="flex items-center justify-center h-[750px] text-gray-500 text-sm">데이터 없음</div>
         )}
       </div>
 
       {histData?.dataSourceInfo && (
         <div className="text-xs text-gray-600 text-right">
-          F&G 데이터: {histData.dataSourceInfo.startDate} ~ {histData.dataSourceInfo.endDate} ({histData.dataSourceInfo.totalDays.toLocaleString()}일)
+          F&G: {histData.dataSourceInfo.startDate} ~ {histData.dataSourceInfo.endDate} ({histData.dataSourceInfo.totalDays.toLocaleString()}일)
         </div>
       )}
     </div>

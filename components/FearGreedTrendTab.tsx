@@ -19,26 +19,50 @@ const INDEX_OPTIONS: { key: IndexKey; label: string; color: string }[] = [
   { key: 'SOXX', label: 'SOXX',       color: '#34d399' },
 ];
 
-/** Convert a price series to 0-100 percentile rank over its own distribution */
-function percentileRank(data: { time: string; value: number }[]): { time: string; value: number }[] {
-  if (!data.length) return [];
-  const sorted = [...data.map(d => d.value)].sort((a, b) => a - b);
-  const n = sorted.length;
-  return data.map(d => {
-    let lo = 0, hi = n;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (sorted[mid] <= d.value) lo = mid + 1;
-      else hi = mid;
-    }
-    return { time: d.time, value: (lo / n) * 100 };
-  });
+const FG_LINES = [
+  { key: 'd1',   label: '1일',     color: '#60a5fa' },
+  { key: 'ma20', label: '20일 MA', color: '#e2e8f0' },
+  { key: 'ma60', label: '60일 MA', color: '#eab308' },
+  { key: 'ma200',label: '200일 MA',color: '#f97316' },
+] as const;
+
+type FgLineKey = typeof FG_LINES[number]['key'];
+
+/**
+ * OLS linear detrend: fit y = a·i + b, subtract trend, then normalize residuals to 0–100.
+ * Applied to the visible (filtered) window so the normalization is contextual.
+ */
+function linearDetrend(data: { time: string; value: number }[]): { time: string; value: number }[] {
+  const n = data.length;
+  if (n < 2) return data.map(d => ({ ...d, value: 50 }));
+
+  const sumX  = (n * (n - 1)) / 2;
+  const sumX2 = (n * (n - 1) * (2 * n - 1)) / 6;
+  const sumY  = data.reduce((s, d) => s + d.value, 0);
+  const sumXY = data.reduce((s, d, i) => s + i * d.value, 0);
+  const denom = n * sumX2 - sumX * sumX;
+
+  const slope     = denom === 0 ? 0 : (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+
+  const residuals = data.map((d, i) => d.value - (slope * i + intercept));
+  const minR = Math.min(...residuals);
+  const maxR = Math.max(...residuals);
+  const range = maxR - minR;
+
+  return data.map((d, i) => ({
+    time: d.time,
+    value: range === 0 ? 50 : ((residuals[i] - minR) / range) * 100,
+  }));
 }
 
 export default function FearGreedTrendTab() {
   const [periodDays, setPeriodDays] = useState<number | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<IndexKey | null>(null);
   const [detrended, setDetrended] = useState(false);
+  const [fgVis, setFgVis] = useState<Record<FgLineKey, boolean>>({
+    d1: true, ma20: true, ma60: true, ma200: true,
+  });
 
   const { data: histData, isLoading } = useSWR<FgHistoryResponse>(
     '/api/fear-greed-history', fetcher,
@@ -82,7 +106,7 @@ export default function FearGreedTrendTab() {
     }
     const filtered = cutoff ? raw.filter(p => new Date(p.date) >= cutoff) : raw;
     const series = filtered.map(p => ({ time: p.date, value: p.close }));
-    return detrended ? percentileRank(series) : series;
+    return detrended ? linearDetrend(series) : series;
   }, [selectedIndex, histData, qqqData, soxxData, cutoff, detrended]);
 
   const indexMeta = selectedIndex ? INDEX_OPTIONS.find(o => o.key === selectedIndex) : null;
@@ -91,8 +115,10 @@ export default function FearGreedTrendTab() {
     if (!filteredFg.length) return [];
 
     const raw = filteredFg.map(p => ({ time: p.date, value: p.score }));
-    const series: SeriesConfig[] = [
-      {
+    const series: SeriesConfig[] = [];
+
+    if (fgVis.d1) {
+      series.push({
         type: 'area',
         data: raw,
         color: '#60a5fa',
@@ -100,38 +126,48 @@ export default function FearGreedTrendTab() {
         bottomColor: 'rgba(96,165,250,0.01)',
         lineWidth: 1,
         priceScaleId: 'left',
+        lastValueVisible: true,
         priceLines: [
           { price: 25, color: 'rgba(220,38,38,0.5)',  label: 'Fear',      style: 'dotted' },
           { price: 45, color: 'rgba(249,115,22,0.5)', label: 'Neutral',   style: 'dotted' },
           { price: 55, color: 'rgba(234,179,8,0.5)',  label: 'Greed',     style: 'dotted' },
           { price: 75, color: 'rgba(34,197,94,0.5)',  label: 'Ex. Greed', style: 'dotted' },
         ],
-      },
-      {
+      });
+    }
+
+    if (fgVis.ma20) {
+      series.push({
         type: 'line',
         data: movingAverage(raw, 20),
-        color: '#ffffff',
+        color: '#e2e8f0',
         lineWidth: 2,
         priceScaleId: 'left',
         lastValueVisible: true,
-      },
-      {
+      });
+    }
+
+    if (fgVis.ma60) {
+      series.push({
         type: 'line',
         data: movingAverage(raw, 60),
         color: '#eab308',
         lineWidth: 2,
         priceScaleId: 'left',
         lastValueVisible: true,
-      },
-      {
+      });
+    }
+
+    if (fgVis.ma200) {
+      series.push({
         type: 'line',
         data: movingAverage(raw, 200),
         color: '#f97316',
         lineWidth: 2,
         priceScaleId: 'left',
         lastValueVisible: true,
-      },
-    ];
+      });
+    }
 
     if (indexMeta && filteredIndex.length > 0) {
       series.push({
@@ -145,9 +181,12 @@ export default function FearGreedTrendTab() {
     }
 
     return series;
-  }, [filteredFg, filteredIndex, indexMeta, detrended]);
+  }, [filteredFg, filteredIndex, indexMeta, detrended, fgVis]);
 
   const showRightAxis = selectedIndex !== null && !detrended;
+
+  const toggleFg = (key: FgLineKey) =>
+    setFgVis(prev => ({ ...prev, [key]: !prev[key] }));
 
   if (isLoading) {
     return (
@@ -159,22 +198,19 @@ export default function FearGreedTrendTab() {
 
   return (
     <div className="space-y-4">
-      {/* Controls */}
+      {/* Row 1: Period + Index selector + Detrend */}
       <div className="flex flex-wrap items-center gap-3">
         <PeriodSelector options={FG_PERIOD_OPTIONS} selected={periodDays} onChange={setPeriodDays} />
 
         <div className="h-4 border-l border-gray-700" />
 
-        {/* Index selector */}
         <div className="flex items-center gap-1">
           <span className="text-xs text-gray-500 mr-1">지수 오버레이:</span>
           <button
             onClick={() => { setSelectedIndex(null); setDetrended(false); }}
             className={clsx(
               'px-3 py-1 text-sm rounded font-medium transition-colors',
-              selectedIndex === null
-                ? 'bg-gray-600 text-white'
-                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              selectedIndex === null ? 'bg-gray-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
             )}
           >
             없음
@@ -185,9 +221,7 @@ export default function FearGreedTrendTab() {
               onClick={() => setSelectedIndex(opt.key)}
               className={clsx(
                 'px-3 py-1 text-sm rounded font-medium transition-colors border',
-                selectedIndex === opt.key
-                  ? 'text-white border-transparent'
-                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700 border-transparent'
+                selectedIndex === opt.key ? 'text-white border-transparent' : 'bg-gray-800 text-gray-300 hover:bg-gray-700 border-transparent'
               )}
               style={selectedIndex === opt.key ? { backgroundColor: opt.color + 'aa' } : undefined}
             >
@@ -196,7 +230,6 @@ export default function FearGreedTrendTab() {
           ))}
         </div>
 
-        {/* Detrend toggle */}
         {selectedIndex && (
           <button
             onClick={() => setDetrended(v => !v)}
@@ -206,32 +239,47 @@ export default function FearGreedTrendTab() {
                 ? 'bg-violet-700 border-violet-500 text-white'
                 : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
             )}
-            title="추세(장기 우상향)를 제거하고 0-100 백분위로 정규화하여 F&G와 같은 축에 비교"
+            title="선형회귀로 장기 추세를 제거한 후 0-100으로 정규화하여 F&G와 같은 축에 비교"
           >
             추세 제거 {detrended ? 'ON' : 'OFF'}
           </button>
         )}
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap gap-4 text-xs text-gray-400">
-        {[
-          { color: '#60a5fa', label: 'F&G 1일' },
-          { color: '#ffffff', label: '20일 MA' },
-          { color: '#eab308', label: '60일 MA' },
-          { color: '#f97316', label: '200일 MA' },
-        ].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <div className="w-5 h-0.5 rounded" style={{ backgroundColor: color }} />
-            <span>{label}</span>
-          </div>
+      {/* Row 2: F&G line toggles (clickable legend) */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-gray-500">F&G 선:</span>
+        {FG_LINES.map(({ key, label, color }) => (
+          <button
+            key={key}
+            onClick={() => toggleFg(key)}
+            className={clsx(
+              'flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-medium transition-all',
+              fgVis[key]
+                ? 'text-white'
+                : 'border-gray-700 text-gray-600 bg-gray-900/30 opacity-50'
+            )}
+            style={fgVis[key] ? { borderColor: color + '70', backgroundColor: color + '18' } : undefined}
+          >
+            <div
+              className="w-4 h-0.5 rounded shrink-0"
+              style={{ backgroundColor: fgVis[key] ? color : '#4b5563' }}
+            />
+            {label}
+          </button>
         ))}
         {indexMeta && (
-          <div className="flex items-center gap-1.5">
-            <div className="w-5 h-0.5 rounded" style={{ backgroundColor: indexMeta.color }} />
-            <span>{indexMeta.label}</span>
-            {detrended && <span className="text-violet-400 ml-1">(백분위 정규화)</span>}
-          </div>
+          <>
+            <span className="text-gray-700 text-xs">|</span>
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs text-white"
+              style={{ borderColor: indexMeta.color + '70', backgroundColor: indexMeta.color + '18' }}
+            >
+              <div className="w-4 h-0.5 rounded" style={{ backgroundColor: indexMeta.color }} />
+              {indexMeta.label}
+              {detrended && <span className="text-violet-300 ml-0.5">(추세 제거)</span>}
+            </div>
+          </>
         )}
       </div>
 
@@ -240,18 +288,17 @@ export default function FearGreedTrendTab() {
         {chartSeries.length > 0 ? (
           <TvChart
             series={chartSeries}
-            height={600}
+            height={750}
             leftScaleVisible
             rightScaleVisible={showRightAxis}
           />
         ) : (
-          <div className="flex items-center justify-center h-[600px] text-gray-500 text-sm">
+          <div className="flex items-center justify-center h-[750px] text-gray-500 text-sm">
             데이터 없음
           </div>
         )}
       </div>
 
-      {/* Data range info */}
       {histData?.dataSourceInfo && (
         <div className="text-xs text-gray-600 text-right">
           F&G 데이터: {histData.dataSourceInfo.startDate} ~ {histData.dataSourceInfo.endDate} ({histData.dataSourceInfo.totalDays.toLocaleString()}일)

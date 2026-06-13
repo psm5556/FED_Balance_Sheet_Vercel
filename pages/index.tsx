@@ -34,7 +34,7 @@ export default function Home() {
       <div className="min-h-screen bg-[#0e1117] text-white">
         {/* Top bar */}
         <header className="border-b border-gray-800 bg-gray-950/80 backdrop-blur-sm sticky top-0 z-10">
-          <div className="max-w-screen-2xl mx-auto px-4 py-3 flex items-center gap-3">
+          <div className="px-6 py-3 flex items-center gap-3">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-lg font-bold text-white truncate">
                 📊 Fed 모니터링 대시보드
@@ -54,7 +54,7 @@ export default function Home() {
           </div>
 
           {/* Tab navigation */}
-          <nav className="max-w-screen-2xl mx-auto px-4 flex gap-1 pb-0">
+          <nav className="px-6 flex gap-1 pb-0">
             {TABS.map(tab => (
               <button
                 key={tab.id}
@@ -73,7 +73,7 @@ export default function Home() {
         </header>
 
         {/* Main content */}
-        <main className="max-w-screen-2xl mx-auto px-4 py-6">
+        <main className="px-6 py-6">
           {activeTab === 'balance'   && <BalanceSheetTab />}
           {activeTab === 'spreads'   && <RateSpreadsTab />}
           {activeTab === 'feargreed' && <FearGreedHistoryTab />}
@@ -81,7 +81,7 @@ export default function Home() {
         </main>
 
         <footer className="border-t border-gray-800 mt-12 py-4">
-          <div className="max-w-screen-2xl mx-auto px-4 text-center text-xs text-gray-600">
+          <div className="px-6 text-center text-xs text-gray-600">
             데이터 출처: Federal Reserve Economic Data (FRED) · CNN Business Fear &amp; Greed Index
           </div>
         </footer>

@@ -109,6 +109,20 @@ export default function FearGreedTrendTab() {
     const raw = filteredFg.map(p => ({ time: p.date, value: p.score }));
     const series: SeriesConfig[] = [];
 
+    // Monday background bands (rendered first so they appear behind all other series)
+    const mondayData = filteredFg
+      .filter(p => { const [y, m, d] = p.date.split('-').map(Number); return new Date(y, m - 1, d).getDay() === 1; })
+      .map(p => ({ time: p.date, value: 100 }));
+    if (mondayData.length > 0) {
+      series.push({
+        type: 'histogram',
+        data: mondayData,
+        color: 'rgba(148,163,184,0.12)',
+        priceScaleId: 'left',
+        lastValueVisible: false,
+      });
+    }
+
     if (fgVis.d1) {
       series.push({
         type: 'area',

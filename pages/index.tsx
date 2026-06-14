@@ -8,12 +8,14 @@ const BalanceSheetTab    = dynamic(() => import('@/components/BalanceSheetTab'),
 const RateSpreadsTab     = dynamic(() => import('@/components/RateSpreadsTab'),     { ssr: false });
 const FearGreedHistoryTab = dynamic(() => import('@/components/FearGreedHistoryTab'), { ssr: false });
 const FearGreedTrendTab   = dynamic(() => import('@/components/FearGreedTrendTab'),   { ssr: false });
+const WeekdayPatternTab   = dynamic(() => import('@/components/WeekdayPatternTab'),   { ssr: false });
 
 const TABS = [
-  { id: 'balance',   label: '💰 Fed Balance Sheet' },
-  { id: 'spreads',   label: '📈 금리 스프레드' },
-  { id: 'feargreed', label: '😨 Fear & Greed 히스토리' },
-  { id: 'fg-trend',  label: '📊 F&G 트렌드' },
+  { id: 'balance',          label: '💰 Fed Balance Sheet' },
+  { id: 'spreads',          label: '📈 금리 스프레드' },
+  { id: 'feargreed',        label: '😨 Fear & Greed 히스토리' },
+  { id: 'fg-trend',         label: '📊 F&G 트렌드' },
+  { id: 'weekday-pattern',  label: '📅 요일 패턴' },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -77,7 +79,8 @@ export default function Home() {
           {activeTab === 'balance'   && <BalanceSheetTab />}
           {activeTab === 'spreads'   && <RateSpreadsTab />}
           {activeTab === 'feargreed' && <FearGreedHistoryTab />}
-          {activeTab === 'fg-trend'  && <FearGreedTrendTab />}
+          {activeTab === 'fg-trend'         && <FearGreedTrendTab />}
+          {activeTab === 'weekday-pattern'  && <WeekdayPatternTab />}
         </main>
 
         <footer className="border-t border-gray-800 mt-12 py-4">

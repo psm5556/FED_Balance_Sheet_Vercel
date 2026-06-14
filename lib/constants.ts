@@ -204,3 +204,59 @@ export const FG_PERIOD_OPTIONS = [
   { label: '5년',   days: 1825 },
   { label: '전체',  days: null },
 ];
+
+// ── Index Groups (shared with F&G Trend and Weekday Pattern tabs) ─────────────
+
+export interface IndexOption {
+  key: string;
+  label: string;
+  title: string;
+  color: string;
+}
+
+export const INDEX_GROUPS: { group: string; items: IndexOption[] }[] = [
+  {
+    group: '주요',
+    items: [
+      { key: 'SP500', label: 'S&P 500',    title: 'S&P 500 (FRED)',         color: '#f59e0b' },
+      { key: 'QQQ',   label: 'NASDAQ 100', title: 'NASDAQ 100 (QQQ)',        color: '#a78bfa' },
+      { key: 'SOXX',  label: 'SOXX',       title: '반도체 (iShares SOXX)',   color: '#34d399' },
+      { key: 'SCHD',  label: 'SCHD',       title: '배당주 (Schwab SCHD)',    color: '#fb923c' },
+    ],
+  },
+  {
+    group: '섹터',
+    items: [
+      { key: 'XLK', label: 'XLK', title: '기술 (Technology)',              color: '#38bdf8' },
+      { key: 'VGT', label: 'VGT', title: '기술 (Vanguard VGT)',            color: '#7dd3fc' },
+      { key: 'XLV', label: 'XLV', title: '헬스케어',                       color: '#4ade80' },
+      { key: 'XLF', label: 'XLF', title: '금융',                           color: '#fde047' },
+      { key: 'XLY', label: 'XLY', title: '소비재',                         color: '#f472b6' },
+      { key: 'XLP', label: 'XLP', title: '필수소비재',                     color: '#cbd5e1' },
+      { key: 'XLI', label: 'XLI', title: '산업',                           color: '#c084fc' },
+      { key: 'XLC', label: 'XLC', title: '통신서비스',                     color: '#818cf8' },
+      { key: 'XLE', label: 'XLE', title: '에너지',                         color: '#d97706' },
+      { key: 'XLU', label: 'XLU', title: '유틸리티',                       color: '#2dd4bf' },
+    ],
+  },
+  {
+    group: '테마',
+    items: [
+      { key: 'ARKK', label: 'ARKK', title: 'ARK 혁신 ETF',                 color: '#f43f5e' },
+      { key: 'ARKF', label: 'ARKF', title: 'ARK 핀테크 ETF',               color: '#ec4899' },
+      { key: 'ARKG', label: 'ARKG', title: 'ARK 유전체 ETF',               color: '#10b981' },
+      { key: 'BOTZ', label: 'BOTZ', title: 'AI/로보틱스 (Global X)',        color: '#8b5cf6' },
+      { key: 'QTUM', label: 'QTUM', title: '양자컴퓨팅 (Defiance)',         color: '#06b6d4' },
+      { key: 'WQTM', label: 'WQTM', title: '양자컴퓨팅 (WisdomTree)',       color: '#22d3ee' },
+      { key: 'GRID', label: 'GRID', title: '스마트그리드 (First Trust)',     color: '#84cc16' },
+      { key: 'LIT',  label: 'LIT',  title: '리튬/배터리 (Global X)',        color: '#a3e635' },
+      { key: 'ICLN', label: 'ICLN', title: '클린에너지 (iShares)',          color: '#86efac' },
+      { key: 'CIBR', label: 'CIBR', title: '사이버보안 (First Trust)',       color: '#fb7185' },
+      { key: 'UFO',  label: 'UFO',  title: '우주항공 (Procure)',            color: '#c7d2fe' },
+      { key: 'ITA',  label: 'ITA',  title: '방산/항공우주 (iShares)',        color: '#9ca3af' },
+      { key: 'BLOK', label: 'BLOK', title: '블록체인 (Amplify)',            color: '#fbbf24' },
+    ],
+  },
+];
+
+export const ALL_INDEX_OPTIONS = INDEX_GROUPS.flatMap(g => g.items);

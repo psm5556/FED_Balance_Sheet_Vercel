@@ -48,12 +48,13 @@ const WEEKDAYS = [1, 2, 3, 4, 5] as const;
 const WEEKDAY_LABELS: Record<number, string> = { 1:'월', 2:'화', 3:'수', 4:'목', 5:'금' };
 const WEEKDAY_FULL:   Record<number, string> = { 1:'월요일', 2:'화요일', 3:'수요일', 4:'목요일', 5:'금요일' };
 
-const PAIRS: { from: number; to: number; highlight?: boolean }[] = [
+const PAIRS: { from: number; to: number; highlight?: boolean; gap?: number; label?: string }[] = [
   { from: 1, to: 2 },
   { from: 2, to: 3 },
   { from: 3, to: 4 },
   { from: 4, to: 5, highlight: true },
   { from: 5, to: 1, highlight: true },
+  { from: 4, to: 1, highlight: true, gap: 2, label: '목 → 월 (금 건너뜀)' },
 ];
 
 // ── Stats helpers ─────────────────────────────────────────────────────────────
@@ -94,13 +95,13 @@ function computeWeekdayStats(returns: ReturnPoint[]): Record<number, WeekdayStat
   return result;
 }
 
-function computePairStat(returns: ReturnPoint[], fromWd: number, toWd: number): PairStat {
+function computePairStat(returns: ReturnPoint[], fromWd: number, toWd: number, gap = 1): PairStat {
   const downPrevRets: number[] = [];
   const upPrevRets: number[] = [];
 
-  for (let i = 1; i < returns.length; i++) {
-    if (returns[i].weekday === toWd && returns[i - 1].weekday === fromWd) {
-      (returns[i - 1].ret < 0 ? downPrevRets : upPrevRets).push(returns[i].ret);
+  for (let i = gap; i < returns.length; i++) {
+    if (returns[i].weekday === toWd && returns[i - gap].weekday === fromWd) {
+      (returns[i - gap].ret < 0 ? downPrevRets : upPrevRets).push(returns[i].ret);
     }
   }
 
@@ -189,7 +190,7 @@ export default function WeekdayPatternTab() {
   const wdStats      = useMemo(() => computeWeekdayStats(returns), [returns]);
   const pairStats    = useMemo<Record<string, PairStat>>(() => {
     const r: Record<string, PairStat> = {};
-    for (const { from, to } of PAIRS) r[`${from}-${to}`] = computePairStat(returns, from, to);
+    for (const { from, to, gap = 1 } of PAIRS) r[`${from}-${to}-${gap}`] = computePairStat(returns, from, to, gap);
     return r;
   }, [returns]);
   const thuFriMon    = useMemo(() => computeThuFriMon(returns), [returns]);
@@ -328,13 +329,14 @@ export default function WeekdayPatternTab() {
               연속 요일 조건부 분석
               <span className="ml-2 text-xs text-gray-500 font-normal">오늘 방향에 따른 내일 수익률</span>
             </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              {PAIRS.map(({ from, to, highlight }) => {
-                const stat = pairStats[`${from}-${to}`];
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {PAIRS.map(({ from, to, highlight, gap = 1, label }) => {
+                const stat = pairStats[`${from}-${to}-${gap}`];
                 if (!stat) return null;
+                const title = label ?? `${WEEKDAY_LABELS[from]} → ${WEEKDAY_LABELS[to]}`;
                 return (
                   <div
-                    key={`${from}-${to}`}
+                    key={`${from}-${to}-${gap}`}
                     className={clsx(
                       'rounded-lg border p-3 space-y-3',
                       highlight
@@ -343,8 +345,8 @@ export default function WeekdayPatternTab() {
                     )}
                   >
                     <div className="flex items-center justify-between gap-1">
-                      <span className="text-xs font-semibold text-gray-200">
-                        {WEEKDAY_LABELS[from]} → {WEEKDAY_LABELS[to]}
+                      <span className="text-xs font-semibold text-gray-200 leading-tight">
+                        {title}
                       </span>
                       {highlight && (
                         <span className="text-[10px] bg-yellow-700/40 text-yellow-300 px-1.5 py-0.5 rounded shrink-0">핵심</span>
@@ -354,7 +356,7 @@ export default function WeekdayPatternTab() {
                     {/* When prev day was down */}
                     <div className="space-y-1">
                       <div className="text-[10px] text-red-400 font-medium">
-                        {WEEKDAY_LABELS[from]} 하락 ({stat.downPrev.count}건)
+                        {WEEKDAY_LABELS[from]} 하락 시 ({stat.downPrev.count}건)
                       </div>
                       <div className="text-xs text-gray-300">
                         상승 확률{' '}
@@ -375,7 +377,7 @@ export default function WeekdayPatternTab() {
                     {/* When prev day was up */}
                     <div className="space-y-1">
                       <div className="text-[10px] text-green-400 font-medium">
-                        {WEEKDAY_LABELS[from]} 상승 ({stat.upPrev.count}건)
+                        {WEEKDAY_LABELS[from]} 상승 시 ({stat.upPrev.count}건)
                       </div>
                       <div className="text-xs text-gray-300">
                         상승 확률{' '}
